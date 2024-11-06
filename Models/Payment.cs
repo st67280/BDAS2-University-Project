@@ -11,6 +11,6 @@ namespace BDAS2_University_Project.Models
         public int PaymentId { get; set; }
         public int BillBillId { get; set; }
         public int ClientClientId { get; set; }
-        public string TypePayment { get; set; }
+        public int PaymentTypeId { get; set; }
     }
 }

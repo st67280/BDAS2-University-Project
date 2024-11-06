@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface IEmployerRepository
     {
         IEnumerable<Employer> GetAll();
-        Employer GetById(int id);
-        void Add(Employer employer);
-        void Update(Employer employer);
-        void Delete(int id);
+        Employer GetByPhone(string phone);
+        void Add(Employer employer, User currentUser);
+        void Update(Employer employer, User currentUser);
+        void Delete(string phone, User currentUser);
     }
 }

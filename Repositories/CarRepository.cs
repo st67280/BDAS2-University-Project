@@ -3,6 +3,7 @@ using BDAS2_University_Project.Repositories.Interfaces;
 using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,7 +26,7 @@ namespace BDAS2_University_Project.Repositories
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT CAR_ID, SPZ, CAR_BRAND, SYMPTOMS, RESERVATION_RESERVATION_ID FROM CAR";
+                string query = "SELECT spz, car_brand, symptoms, reservation_reservation_id FROM car";
                 using (var command = new OracleCommand(query, connection))
                 {
                     using (var reader = command.ExecuteReader())
@@ -34,11 +35,10 @@ namespace BDAS2_University_Project.Repositories
                         {
                             var car = new Car
                             {
-                                CarId = Convert.ToInt32(reader["CAR_ID"]),
-                                Spz = reader["SPZ"].ToString(),
-                                CarBrand = reader["CAR_BRAND"].ToString(),
-                                Symptoms = reader["SYMPTOMS"].ToString(),
-                                ReservationReservationId = Convert.ToInt32(reader["RESERVATION_RESERVATION_ID"])
+                                Spz = reader["spz"].ToString(),
+                                CarBrand = reader["car_brand"].ToString(),
+                                Symptoms = reader["symptoms"].ToString(),
+                                ReservationReservationId = Convert.ToInt32(reader["reservation_reservation_id"])
                             };
                             cars.Add(car);
                         }
@@ -49,28 +49,27 @@ namespace BDAS2_University_Project.Repositories
             return cars;
         }
 
-        public Car GetById(int id)
+        public Car GetBySpz(string spz)
         {
             Car car = null;
 
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT CAR_ID, SPZ, CAR_BRAND, SYMPTOMS, RESERVATION_RESERVATION_ID FROM CAR WHERE CAR_ID = :Id";
+                string query = "SELECT spz, car_brand, symptoms, reservation_reservation_id FROM car WHERE spz = :Spz";
                 using (var command = new OracleCommand(query, connection))
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
+                    command.Parameters.Add("Spz", OracleDbType.Varchar2).Value = spz;
                     using (var reader = command.ExecuteReader())
                     {
                         if (reader.Read())
                         {
                             car = new Car
                             {
-                                CarId = Convert.ToInt32(reader["CAR_ID"]),
-                                Spz = reader["SPZ"].ToString(),
-                                CarBrand = reader["CAR_BRAND"].ToString(),
-                                Symptoms = reader["SYMPTOMS"].ToString(),
-                                ReservationReservationId = Convert.ToInt32(reader["RESERVATION_RESERVATION_ID"])
+                                Spz = reader["spz"].ToString(),
+                                CarBrand = reader["car_brand"].ToString(),
+                                Symptoms = reader["symptoms"].ToString(),
+                                ReservationReservationId = Convert.ToInt32(reader["reservation_reservation_id"])
                             };
                         }
                     }
@@ -80,55 +79,139 @@ namespace BDAS2_University_Project.Repositories
             return car;
         }
 
-        public void Add(Car car)
+        public void Add(Car car, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("AddCar"))
+                throw new UnauthorizedAccessException("У вас нет прав для добавления автомобиля.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"INSERT INTO CAR (SPZ, CAR_BRAND, SYMPTOMS, RESERVATION_RESERVATION_ID)
-                                 VALUES (:Spz, :CarBrand, :Symptoms, :ReservationReservationId)";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Spz", car.Spz));
-                    command.Parameters.Add(new OracleParameter("CarBrand", car.CarBrand));
-                    command.Parameters.Add(new OracleParameter("Symptoms", car.Symptoms));
-                    command.Parameters.Add(new OracleParameter("ReservationReservationId", car.ReservationReservationId));
-                    command.ExecuteNonQuery();
+                    // Вызов хранимой процедуры для вставки данных
+                    using (var command = new OracleCommand("insert_car", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_spz", OracleDbType.Varchar2).Value = car.Spz;
+                        command.Parameters.Add("p_car_brand", OracleDbType.Varchar2).Value = car.CarBrand;
+                        command.Parameters.Add("p_symptoms", OracleDbType.Varchar2).Value = car.Symptoms;
+                        command.Parameters.Add("p_reservation_reservation_id", OracleDbType.Int32).Value = car.ReservationReservationId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Update(Car car)
+        public void Update(Car car, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("UpdateCar"))
+                throw new UnauthorizedAccessException("У вас нет прав для обновления автомобиля.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"UPDATE CAR SET SPZ = :Spz, CAR_BRAND = :CarBrand, SYMPTOMS = :Symptoms, RESERVATION_RESERVATION_ID = :ReservationReservationId
-                                 WHERE CAR_ID = :CarId";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Spz", car.Spz));
-                    command.Parameters.Add(new OracleParameter("CarBrand", car.CarBrand));
-                    command.Parameters.Add(new OracleParameter("Symptoms", car.Symptoms));
-                    command.Parameters.Add(new OracleParameter("ReservationReservationId", car.ReservationReservationId));
-                    command.Parameters.Add(new OracleParameter("CarId", car.CarId));
-                    command.ExecuteNonQuery();
+                    // Получаем car_id по spz
+                    int carId = GetCarIdBySpz(car.Spz, connection);
+
+                    if (carId == 0)
+                        throw new Exception("Автомобиль не найден.");
+
+                    // Вызов хранимой процедуры для обновления данных
+                    using (var command = new OracleCommand("update_car", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_car_id", OracleDbType.Int32).Value = carId;
+                        command.Parameters.Add("p_spz", OracleDbType.Varchar2).Value = car.Spz;
+                        command.Parameters.Add("p_car_brand", OracleDbType.Varchar2).Value = car.CarBrand;
+                        command.Parameters.Add("p_symptoms", OracleDbType.Varchar2).Value = car.Symptoms;
+                        command.Parameters.Add("p_reservation_reservation_id", OracleDbType.Int32).Value = car.ReservationReservationId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Delete(int id)
+        public void Delete(string spz, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("DeleteCar"))
+                throw new UnauthorizedAccessException("У вас нет прав для удаления автомобиля.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "DELETE FROM CAR WHERE CAR_ID = :Id";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
-                    command.ExecuteNonQuery();
+                    // Получаем car_id по spz
+                    int carId = GetCarIdBySpz(spz, connection);
+
+                    if (carId == 0)
+                        throw new Exception("Автомобиль не найден.");
+
+                    // Вызов хранимой процедуры для удаления данных
+                    using (var command = new OracleCommand("delete_car", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_car_id", OracleDbType.Int32).Value = carId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
+        }
+
+        private int GetCarIdBySpz(string spz, OracleConnection connection)
+        {
+            string query = "SELECT car_id FROM car WHERE spz = :Spz";
+            using (var command = new OracleCommand(query, connection))
+            {
+                command.Parameters.Add("Spz", OracleDbType.Varchar2).Value = spz;
+                using (var reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return Convert.ToInt32(reader["car_id"]);
+                    }
+                }
+            }
+            return 0;
         }
     }
 }

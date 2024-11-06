@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface ICarRepository
     {
         IEnumerable<Car> GetAll();
-        Car GetById(int id);
-        void Add(Car car);
-        void Update(Car car);
-        void Delete(int id);
+        Car GetBySpz(string spz);
+        void Add(Car car, User currentUser);
+        void Update(Car car, User currentUser);
+        void Delete(string spz, User currentUser);
     }
 }

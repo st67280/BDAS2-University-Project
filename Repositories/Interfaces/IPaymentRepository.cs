@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface IPaymentRepository
     {
         IEnumerable<Payment> GetAll();
-        Payment GetById(int id);
-        void Add(Payment payment);
-        void Update(Payment payment);
-        void Delete(int id);
+        Payment GetByBillId(int billId);
+        void Add(Payment payment, User currentUser);
+        void Update(Payment payment, User currentUser);
+        void Delete(int billId, User currentUser);
     }
 }

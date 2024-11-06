@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface IReservationRepository
     {
         IEnumerable<Reservation> GetAll();
-        Reservation GetById(int id);
-        void Add(Reservation reservation);
-        void Update(Reservation reservation);
-        void Delete(int id);
+        Reservation GetByDate(DateTime date);
+        void Add(Reservation reservation, User currentUser);
+        void Update(Reservation reservation, User currentUser);
+        void Delete(DateTime date, User currentUser);
     }
 }

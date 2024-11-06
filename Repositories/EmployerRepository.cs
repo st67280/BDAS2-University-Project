@@ -3,6 +3,7 @@ using BDAS2_University_Project.Repositories.Interfaces;
 using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,7 +26,7 @@ namespace BDAS2_University_Project.Repositories
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT EMPLOYER_ID, SPECIALITY, NAME_EMPLOYEE, PHONE, OFFICE_OFFICE_ID, EMPLOYER_EMPLOYER_ID, ADDRESS_ADDRESS_ID FROM EMPLOYER";
+                string query = "SELECT name_employee, speciality, phone, office_office_id, employer_employer_id, address_address_id FROM employer";
                 using (var command = new OracleCommand(query, connection))
                 {
                     using (var reader = command.ExecuteReader())
@@ -34,13 +35,12 @@ namespace BDAS2_University_Project.Repositories
                         {
                             var employer = new Employer
                             {
-                                EmployerId = Convert.ToInt32(reader["EMPLOYER_ID"]),
-                                Speciality = reader["SPECIALITY"].ToString(),
-                                NameEmployee = reader["NAME_EMPLOYEE"].ToString(),
-                                Phone = reader["PHONE"].ToString(),
-                                OfficeOfficeId = Convert.ToInt32(reader["OFFICE_OFFICE_ID"]),
-                                EmployerEmployerId = reader["EMPLOYER_EMPLOYER_ID"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["EMPLOYER_EMPLOYER_ID"]),
-                                AddressAddressId = Convert.ToInt32(reader["ADDRESS_ADDRESS_ID"])
+                                NameEmployee = reader["name_employee"].ToString(),
+                                Speciality = reader["speciality"].ToString(),
+                                Phone = reader["phone"].ToString(),
+                                OfficeOfficeId = Convert.ToInt32(reader["office_office_id"]),
+                                EmployerEmployerId = reader["employer_employer_id"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["employer_employer_id"]),
+                                AddressAddressId = Convert.ToInt32(reader["address_address_id"])
                             };
                             employers.Add(employer);
                         }
@@ -51,30 +51,29 @@ namespace BDAS2_University_Project.Repositories
             return employers;
         }
 
-        public Employer GetById(int id)
+        public Employer GetByPhone(string phone)
         {
             Employer employer = null;
 
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT EMPLOYER_ID, SPECIALITY, NAME_EMPLOYEE, PHONE, OFFICE_OFFICE_ID, EMPLOYER_EMPLOYER_ID, ADDRESS_ADDRESS_ID FROM EMPLOYER WHERE EMPLOYER_ID = :Id";
+                string query = "SELECT name_employee, speciality, phone, office_office_id, employer_employer_id, address_address_id FROM employer WHERE phone = :Phone";
                 using (var command = new OracleCommand(query, connection))
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
+                    command.Parameters.Add("Phone", OracleDbType.Varchar2).Value = phone;
                     using (var reader = command.ExecuteReader())
                     {
                         if (reader.Read())
                         {
                             employer = new Employer
                             {
-                                EmployerId = Convert.ToInt32(reader["EMPLOYER_ID"]),
-                                Speciality = reader["SPECIALITY"].ToString(),
-                                NameEmployee = reader["NAME_EMPLOYEE"].ToString(),
-                                Phone = reader["PHONE"].ToString(),
-                                OfficeOfficeId = Convert.ToInt32(reader["OFFICE_OFFICE_ID"]),
-                                EmployerEmployerId = reader["EMPLOYER_EMPLOYER_ID"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["EMPLOYER_EMPLOYER_ID"]),
-                                AddressAddressId = Convert.ToInt32(reader["ADDRESS_ADDRESS_ID"])
+                                NameEmployee = reader["name_employee"].ToString(),
+                                Speciality = reader["speciality"].ToString(),
+                                Phone = reader["phone"].ToString(),
+                                OfficeOfficeId = Convert.ToInt32(reader["office_office_id"]),
+                                EmployerEmployerId = reader["employer_employer_id"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["employer_employer_id"]),
+                                AddressAddressId = Convert.ToInt32(reader["address_address_id"])
                             };
                         }
                     }
@@ -84,60 +83,143 @@ namespace BDAS2_University_Project.Repositories
             return employer;
         }
 
-        public void Add(Employer employer)
+        public void Add(Employer employer, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("AddEmployer"))
+                throw new UnauthorizedAccessException("У вас нет прав для добавления сотрудника.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"INSERT INTO EMPLOYER (SPECIALITY, NAME_EMPLOYEE, PHONE, OFFICE_OFFICE_ID, EMPLOYER_EMPLOYER_ID, ADDRESS_ADDRESS_ID)
-                                 VALUES (:Speciality, :NameEmployee, :Phone, :OfficeOfficeId, :EmployerEmployerId, :AddressAddressId)";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Speciality", employer.Speciality));
-                    command.Parameters.Add(new OracleParameter("NameEmployee", employer.NameEmployee));
-                    command.Parameters.Add(new OracleParameter("Phone", employer.Phone));
-                    command.Parameters.Add(new OracleParameter("OfficeOfficeId", employer.OfficeOfficeId));
-                    command.Parameters.Add(new OracleParameter("EmployerEmployerId", employer.EmployerEmployerId));
-                    command.Parameters.Add(new OracleParameter("AddressAddressId", employer.AddressAddressId));
-                    command.ExecuteNonQuery();
+                    // Вызов хранимой процедуры для вставки данных
+                    using (var command = new OracleCommand("insert_employer", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_name_employee", OracleDbType.Varchar2).Value = employer.NameEmployee;
+                        command.Parameters.Add("p_speciality", OracleDbType.Varchar2).Value = employer.Speciality;
+                        command.Parameters.Add("p_phone", OracleDbType.Varchar2).Value = employer.Phone;
+                        command.Parameters.Add("p_office_office_id", OracleDbType.Int32).Value = employer.OfficeOfficeId;
+                        command.Parameters.Add("p_employer_employer_id", OracleDbType.Int32).Value = employer.EmployerEmployerId.HasValue ? (object)employer.EmployerEmployerId.Value : DBNull.Value;
+                        command.Parameters.Add("p_address_address_id", OracleDbType.Int32).Value = employer.AddressAddressId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Update(Employer employer)
+        public void Update(Employer employer, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("UpdateEmployer"))
+                throw new UnauthorizedAccessException("У вас нет прав для обновления сотрудника.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"UPDATE EMPLOYER SET SPECIALITY = :Speciality, NAME_EMPLOYEE = :NameEmployee, PHONE = :Phone, 
-                                 OFFICE_OFFICE_ID = :OfficeOfficeId, EMPLOYER_EMPLOYER_ID = :EmployerEmployerId, ADDRESS_ADDRESS_ID = :AddressAddressId
-                                 WHERE EMPLOYER_ID = :EmployerId";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Speciality", employer.Speciality));
-                    command.Parameters.Add(new OracleParameter("NameEmployee", employer.NameEmployee));
-                    command.Parameters.Add(new OracleParameter("Phone", employer.Phone));
-                    command.Parameters.Add(new OracleParameter("OfficeOfficeId", employer.OfficeOfficeId));
-                    command.Parameters.Add(new OracleParameter("EmployerEmployerId", employer.EmployerEmployerId));
-                    command.Parameters.Add(new OracleParameter("AddressAddressId", employer.AddressAddressId));
-                    command.Parameters.Add(new OracleParameter("EmployerId", employer.EmployerId));
-                    command.ExecuteNonQuery();
+                    // Получаем employer_id по телефону
+                    int employerId = GetEmployerIdByPhone(employer.Phone, connection);
+
+                    if (employerId == 0)
+                        throw new Exception("Сотрудник не найден.");
+
+                    // Вызов хранимой процедуры для обновления данных
+                    using (var command = new OracleCommand("update_employer", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_employer_id", OracleDbType.Int32).Value = employerId;
+                        command.Parameters.Add("p_name_employee", OracleDbType.Varchar2).Value = employer.NameEmployee;
+                        command.Parameters.Add("p_speciality", OracleDbType.Varchar2).Value = employer.Speciality;
+                        command.Parameters.Add("p_phone", OracleDbType.Varchar2).Value = employer.Phone;
+                        command.Parameters.Add("p_office_office_id", OracleDbType.Int32).Value = employer.OfficeOfficeId;
+                        command.Parameters.Add("p_employer_employer_id", OracleDbType.Int32).Value = employer.EmployerEmployerId.HasValue ? (object)employer.EmployerEmployerId.Value : DBNull.Value;
+                        command.Parameters.Add("p_address_address_id", OracleDbType.Int32).Value = employer.AddressAddressId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Delete(int id)
+        public void Delete(string phone, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("DeleteEmployer"))
+                throw new UnauthorizedAccessException("У вас нет прав для удаления сотрудника.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "DELETE FROM EMPLOYER WHERE EMPLOYER_ID = :Id";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
-                    command.ExecuteNonQuery();
+                    // Получаем employer_id по телефону
+                    int employerId = GetEmployerIdByPhone(phone, connection);
+
+                    if (employerId == 0)
+                        throw new Exception("Сотрудник не найден.");
+
+                    // Вызов хранимой процедуры для удаления данных
+                    using (var command = new OracleCommand("delete_employer", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_employer_id", OracleDbType.Int32).Value = employerId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
+        }
+
+        private int GetEmployerIdByPhone(string phone, OracleConnection connection)
+        {
+            string query = "SELECT employer_id FROM employer WHERE phone = :Phone";
+            using (var command = new OracleCommand(query, connection))
+            {
+                command.Parameters.Add("Phone", OracleDbType.Varchar2).Value = phone;
+                using (var reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return Convert.ToInt32(reader["employer_id"]);
+                    }
+                }
+            }
+            return 0;
         }
     }
 }

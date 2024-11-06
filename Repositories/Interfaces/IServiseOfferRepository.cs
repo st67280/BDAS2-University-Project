@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface IServiseOfferRepository
     {
         IEnumerable<ServiseOffer> GetAll();
-        ServiseOffer GetById(int id);
-        void Add(ServiseOffer serviseOffer);
-        void Update(ServiseOffer serviseOffer);
-        void Delete(int id);
+        ServiseOffer GetByOfferId(int offerId);
+        void Add(ServiseOffer serviseOffer, User currentUser);
+        void Update(ServiseOffer serviseOffer, User currentUser);
+        void Delete(int offerId, User currentUser);
     }
 }

@@ -3,6 +3,7 @@ using BDAS2_University_Project.Repositories.Interfaces;
 using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,7 +26,7 @@ namespace BDAS2_University_Project.Repositories
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT PAYMENT_ID, BILL_BILL_ID, CLIENT_CLIENT_ID, TYPE_PAYMENT FROM PAYMENT";
+                string query = "SELECT payment_id, bill_bill_id, client_client_id, payment_type_id FROM payment";
                 using (var command = new OracleCommand(query, connection))
                 {
                     using (var reader = command.ExecuteReader())
@@ -34,10 +35,10 @@ namespace BDAS2_University_Project.Repositories
                         {
                             var payment = new Payment
                             {
-                                PaymentId = Convert.ToInt32(reader["PAYMENT_ID"]),
-                                BillBillId = Convert.ToInt32(reader["BILL_BILL_ID"]),
-                                ClientClientId = Convert.ToInt32(reader["CLIENT_CLIENT_ID"]),
-                                TypePayment = reader["TYPE_PAYMENT"].ToString()
+                                PaymentId = Convert.ToInt32(reader["payment_id"]),
+                                BillBillId = Convert.ToInt32(reader["bill_bill_id"]),
+                                ClientClientId = Convert.ToInt32(reader["client_client_id"]),
+                                PaymentTypeId = Convert.ToInt32(reader["payment_type_id"])
                             };
                             payments.Add(payment);
                         }
@@ -48,27 +49,27 @@ namespace BDAS2_University_Project.Repositories
             return payments;
         }
 
-        public Payment GetById(int id)
+        public Payment GetByBillId(int billId)
         {
             Payment payment = null;
 
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "SELECT PAYMENT_ID, BILL_BILL_ID, CLIENT_CLIENT_ID, TYPE_PAYMENT FROM PAYMENT WHERE PAYMENT_ID = :Id";
+                string query = "SELECT payment_id, bill_bill_id, client_client_id, payment_type_id FROM payment WHERE bill_bill_id = :BillId";
                 using (var command = new OracleCommand(query, connection))
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
+                    command.Parameters.Add("BillId", OracleDbType.Int32).Value = billId;
                     using (var reader = command.ExecuteReader())
                     {
                         if (reader.Read())
                         {
                             payment = new Payment
                             {
-                                PaymentId = Convert.ToInt32(reader["PAYMENT_ID"]),
-                                BillBillId = Convert.ToInt32(reader["BILL_BILL_ID"]),
-                                ClientClientId = Convert.ToInt32(reader["CLIENT_CLIENT_ID"]),
-                                TypePayment = reader["TYPE_PAYMENT"].ToString()
+                                PaymentId = Convert.ToInt32(reader["payment_id"]),
+                                BillBillId = Convert.ToInt32(reader["bill_bill_id"]),
+                                ClientClientId = Convert.ToInt32(reader["client_client_id"]),
+                                PaymentTypeId = Convert.ToInt32(reader["payment_type_id"])
                             };
                         }
                     }
@@ -78,53 +79,131 @@ namespace BDAS2_University_Project.Repositories
             return payment;
         }
 
-        public void Add(Payment payment)
+        public void Add(Payment payment, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("AddPayment"))
+                throw new UnauthorizedAccessException("У вас нет прав для добавления платежа.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"INSERT INTO PAYMENT (BILL_BILL_ID, CLIENT_CLIENT_ID, TYPE_PAYMENT)
-                                 VALUES (:BillBillId, :ClientClientId, :TypePayment)";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("BillBillId", payment.BillBillId));
-                    command.Parameters.Add(new OracleParameter("ClientClientId", payment.ClientClientId));
-                    command.Parameters.Add(new OracleParameter("TypePayment", payment.TypePayment));
-                    command.ExecuteNonQuery();
+                    // Вызов хранимой процедуры для вставки данных
+                    using (var command = new OracleCommand("insert_payment", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_bill_bill_id", OracleDbType.Int32).Value = payment.BillBillId;
+                        command.Parameters.Add("p_client_client_id", OracleDbType.Int32).Value = payment.ClientClientId;
+                        command.Parameters.Add("p_payment_type_id", OracleDbType.Int32).Value = payment.PaymentTypeId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Update(Payment payment)
+        public void Update(Payment payment, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("UpdatePayment"))
+                throw new UnauthorizedAccessException("У вас нет прав для обновления платежа.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = @"UPDATE PAYMENT SET BILL_BILL_ID = :BillBillId, CLIENT_CLIENT_ID = :ClientClientId, TYPE_PAYMENT = :TypePayment
-                                 WHERE PAYMENT_ID = :PaymentId";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("BillBillId", payment.BillBillId));
-                    command.Parameters.Add(new OracleParameter("ClientClientId", payment.ClientClientId));
-                    command.Parameters.Add(new OracleParameter("TypePayment", payment.TypePayment));
-                    command.Parameters.Add(new OracleParameter("PaymentId", payment.PaymentId));
-                    command.ExecuteNonQuery();
+                    // Вызов хранимой процедуры для обновления данных
+                    using (var command = new OracleCommand("update_payment", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_payment_id", OracleDbType.Int32).Value = payment.PaymentId;
+                        command.Parameters.Add("p_bill_bill_id", OracleDbType.Int32).Value = payment.BillBillId;
+                        command.Parameters.Add("p_client_client_id", OracleDbType.Int32).Value = payment.ClientClientId;
+                        command.Parameters.Add("p_payment_type_id", OracleDbType.Int32).Value = payment.PaymentTypeId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
 
-        public void Delete(int id)
+        public void Delete(int billId, User currentUser)
         {
+            // Проверка прав доступа
+            if (!currentUser.HasPermission("DeletePayment"))
+                throw new UnauthorizedAccessException("У вас нет прав для удаления платежа.");
+
             using (var connection = new OracleConnection(_connectionString))
             {
                 connection.Open();
-                string query = "DELETE FROM PAYMENT WHERE PAYMENT_ID = :Id";
-                using (var command = new OracleCommand(query, connection))
+                var transaction = connection.BeginTransaction();
+
+                try
                 {
-                    command.Parameters.Add(new OracleParameter("Id", id));
-                    command.ExecuteNonQuery();
+                    // Получаем payment_id по bill_id
+                    int paymentId = GetPaymentIdByBillId(billId, connection);
+
+                    if (paymentId == 0)
+                        throw new Exception("Платеж не найден.");
+
+                    // Вызов хранимой процедуры для удаления данных
+                    using (var command = new OracleCommand("delete_payment", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.Add("p_payment_id", OracleDbType.Int32).Value = paymentId;
+
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
+        }
+
+        private int GetPaymentIdByBillId(int billId, OracleConnection connection)
+        {
+            string query = "SELECT payment_id FROM payment WHERE bill_bill_id = :BillId";
+            using (var command = new OracleCommand(query, connection))
+            {
+                command.Parameters.Add("BillId", OracleDbType.Int32).Value = billId;
+                using (var reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return Convert.ToInt32(reader["payment_id"]);
+                    }
+                }
+            }
+            return 0;
         }
     }
 }

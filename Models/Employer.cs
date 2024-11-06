@@ -8,12 +8,12 @@ namespace BDAS2_University_Project.Models
 {
     public class Employer
     {
-        public int EmployerId { get; set; }
-        public string Speciality { get; set; }
-        public string NameEmployee { get; set; }
-        public string Phone { get; set; }
-        public int OfficeOfficeId { get; set; }
-        public int? EmployerEmployerId { get; set; } // Ссылка на самого себя
-        public int AddressAddressId { get; set; }
+        public int EmployerId { get; set; }             // Первичный ключ
+        public string NameEmployee { get; set; }        // Имя сотрудника
+        public string Speciality { get; set; }          // Специальность
+        public string Phone { get; set; }               // Телефон
+        public int OfficeOfficeId { get; set; }         // Ссылка на офис
+        public int? EmployerEmployerId { get; set; }    // Ссылка на начальника (nullable)
+        public int AddressAddressId { get; set; }       // Ссылка на адрес
     }
 }

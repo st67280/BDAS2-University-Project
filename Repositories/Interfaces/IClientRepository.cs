@@ -10,9 +10,9 @@ namespace BDAS2_University_Project.Repositories.Interfaces
     public interface IClientRepository
     {
         IEnumerable<Client> GetAll();
-        Client GetById(int id);
-        void Add(Client client);
-        void Update(Client client);
-        void Delete(int id);
+        Client GetByPhone(string phone);
+        void Add(Client client, User currentUser);
+        void Update(Client client, User currentUser);
+        void Delete(string phone, User currentUser);
     }
 }
